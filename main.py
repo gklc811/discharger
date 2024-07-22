@@ -26,6 +26,7 @@ class Measurement(Base):
     __tablename__ = 'measurements'
 
     id = Column(Integer, primary_key=True)
+    incremental_id = Column(Integer, unique=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     voltage = Column(Float)
     current = Column(Float)
@@ -70,8 +71,12 @@ def read_data():
                 running = False
                 break
         
+        # Get the next incremental ID
+        next_id = session.query(func.coalesce(func.max(Measurement.incremental_id), 0)).scalar() + 1
+        
         # Write data to SQLite
         measurement = Measurement(
+            incremental_id=next_id,
             voltage=data['voltage'],
             current=data['current'],
             power=data['power'],
@@ -155,13 +160,36 @@ def get_graph_data():
     session = Session()
     
     try:
-        # Get all measurements
-        measurements = session.query(Measurement).order_by(Measurement.timestamp).all()
+        # Get the maximum ID and the total count of measurements
+        max_id = session.query(func.max(Measurement.incremental_id)).scalar()
+        total_count = session.query(func.count(Measurement.id)).scalar()
         
-        if not measurements:
+        if not max_id or total_count == 0:
             return jsonify([])
         
+        # Calculate the multiplication factor
+        factor = max_id / 40  # We'll reserve 2 spots for first and last points
+        
+        if total_count <= 40:
+            # If we have 40 or fewer points, return all of them
+            measurements = session.query(Measurement).order_by(Measurement.incremental_id).all()
+        else:
+            # Generate the list of IDs to query (38 points)
+            ids_to_query = [round(i * factor) for i in range(1, 39)]
+            
+            # Add first and last IDs if they're not already included
+            if 1 not in ids_to_query:
+                ids_to_query.append(1)
+            if max_id not in ids_to_query:
+                ids_to_query.append(max_id)
+            
+            # Query the database for these specific IDs
+            measurements = session.query(Measurement).filter(
+                Measurement.incremental_id.in_(ids_to_query)
+            ).order_by(Measurement.incremental_id).all()
+        
         graph_data = [{
+            'id': m.incremental_id,
             'time': m.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'voltage': round(m.voltage, 2) if m.voltage is not None else None,
             'current': round(m.current, 2) if m.current is not None else None,
