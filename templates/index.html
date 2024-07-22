@@ -211,9 +211,9 @@
             fetch('/graph_data')
                 .then(response => response.json())
                 .then(data => {
-                    chart.data.datasets[0].data = data.map(item => ({x: moment(item.time), y: item.voltage}));
-                    chart.data.datasets[1].data = data.map(item => ({x: moment(item.time), y: item.current}));
-                    chart.data.datasets[2].data = data.map(item => ({x: moment(item.time), y: item.energy}));
+                    chart.data.datasets[0].data = data.map(item => ({x: new Date(item.time), y: item.voltage}));
+                    chart.data.datasets[1].data = data.map(item => ({x: new Date(item.time), y: item.current}));
+                    chart.data.datasets[2].data = data.map(item => ({x: new Date(item.time), y: item.energy}));
                     chart.update();
                 });
         }
