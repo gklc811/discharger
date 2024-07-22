@@ -1,211 +1,225 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AAC Capacity Tester</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f0f0f0; }
-        .container { max-width: 1200px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        h1 { color: #333; }
-        #data-container { margin-top: 20px; display: flex; justify-content: space-around; flex-wrap: wrap; }
-        .data-item { background-color: #e9e9e9; padding: 10px; border-radius: 5px; margin: 5px; flex: 1; min-width: 200px; }
-        #chart-container { width: 100%; height: 500px; margin-top: 20px; }
-        canvas { width: 100% !important; height: 100% !important; }
-        #port-input { padding: 5px; margin-right: 10px; }
-        button { padding: 5px 10px; color: white; border: none; border-radius: 3px; cursor: pointer; margin: 0 5px; }
-        #start-button { background-color: #4CAF50; }
-        #stop-button { background-color: #f44336; }
-        #reset-button { background-color: #2196F3; }
-        button:hover { opacity: 0.8; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .control-panel {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        #port-input {
+            margin-right: 10px;
+            padding: 5px;
+        }
+        button {
+            padding: 5px 10px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        #start-button {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #stop-button {
+            background-color: #f08080;
+            color: white;
+        }
+        #reset-button {
+            background-color: #3498db;
+            color: white;
+        }
+        #data-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .data-item {
+            flex: 1;
+            text-align: center;
+            background-color: #f0f0f0;
+            padding: 10px;
+            margin: 0 5px;
+        }
+        #chart-container {
+            width: 100%;
+            height: 400px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>AAC Capacity Tester</h1>
-        <input type="text" id="port-input" value="Mock" placeholder="Enter port">
+    <h1>AAC Capacity Tester</h1>
+    
+    <div class="control-panel">
+        <input type="text" id="port-input" value="Mock" />
         <button id="start-button" onclick="startReading()">Connect and Start Reading</button>
         <button id="stop-button" onclick="stopReading()" disabled>Stop</button>
-        <button id="reset-button" onclick="resetEnergy()">Reset Energy</button>
-        <div id="data-container">
-            <div class="data-item" id="voltage">Voltage: - V</div>
-            <div class="data-item" id="current">Current: - A</div>
-            <div class="data-item" id="power">Power: - W</div>
-            <div class="data-item" id="energy">Energy: - Wh</div>
-        </div>
-        <div id="chart-container">
-            <canvas id="chart"></canvas>
-        </div>
+        <button id="reset-button" onclick="resetAll()">Reset Energy</button>
     </div>
+
+    <div id="data-container">
+        <div id="voltage" class="data-item">Voltage: - V</div>
+        <div id="current" class="data-item">Current: - A</div>
+        <div id="power" class="data-item">Power: - W</div>
+        <div id="energy" class="data-item">Energy: - Wh</div>
+    </div>
+
+    <div id="chart-container">
+        <canvas id="dataChart"></canvas>
+    </div>
+
     <script>
         let chart;
-        let chartData = {
-            labels: [],
-            voltages: [],
-            currents: [],
-            energies: []
-        };
-        let updateInterval;
+        let intervalId;
 
-        function startReading() {
-            fetch('/start', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({port: document.getElementById('port-input').value})
-            }).then(response => response.json())
-              .then(data => {
-                  console.log(data);
-                  document.getElementById('start-button').disabled = true;
-                  document.getElementById('stop-button').disabled = false;
-              });
-            
-            // Initialize the chart
-            initializeChart();
-            
-            // Start updating data
-            updateInterval = setInterval(updateData, 1000);
-        }
-        
-        function stopReading() {
-            clearInterval(updateInterval);
-            document.getElementById('start-button').disabled = false;
-            document.getElementById('stop-button').disabled = true;
-            fetch('/stop', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => console.log(data));
-        }
-
-        function resetEnergy() {
-            fetch('/reset_energy', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    console.log(data);
-                    alert('Energy reset successful');
-                    
-                    // Reset displayed data
-                    document.getElementById('voltage').textContent = 'Voltage: - V';
-                    document.getElementById('current').textContent = 'Current: - A';
-                    document.getElementById('power').textContent = 'Power: - W';
-                    document.getElementById('energy').textContent = 'Energy: - Wh';
-
-                    // Reset chart data
-                    chartData.labels = [];
-                    chartData.voltages = [];
-                    chartData.currents = [];
-                    chartData.energies = [];
-                    
-                    // Update the chart with the new empty data
-                    chart.data.labels = chartData.labels;
-                    chart.data.datasets[0].data = chartData.voltages;
-                    chart.data.datasets[1].data = chartData.currents;
-                    chart.data.datasets[2].data = chartData.energies;
-                    chart.update();
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Failed to reset energy');
-                });
-        }
-        
         function updateData() {
             fetch('/data')
                 .then(response => response.json())
                 .then(data => {
-                    console.log('Data received:', data);
                     document.getElementById('voltage').textContent = `Voltage: ${data.voltage.toFixed(2)} V`;
                     document.getElementById('current').textContent = `Current: ${data.current.toFixed(2)} A`;
-                    document.getElementById('power').textContent = `Power: ${data.power.toFixed(1)} W`;
-                    document.getElementById('energy').textContent = `Energy: ${data.energy.toFixed(1)} Wh`;
-                    
-                    // Update chart data
-                    const now = new Date().toLocaleTimeString();
-                    chartData.labels.push(now);
-                    chartData.voltages.push(data.voltage);
-                    chartData.currents.push(data.current);
-                    chartData.energies.push(data.energy);
-                    
-                    // Update chart
-                    chart.update();
-                })
-                .catch(error => {
-                    console.error('Error fetching data:', error);
+                    document.getElementById('power').textContent = `Power: ${data.power.toFixed(2)} W`;
+                    document.getElementById('energy').textContent = `Energy: ${data.energy.toFixed(2)} Wh`;
                 });
         }
 
-        function initializeChart() {
-            if (chart) {  // Check if chart already exists and destroy it
-                chart.destroy();
-            }
+        function startReading() {
+            const port = document.getElementById('port-input').value;
+            fetch('/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({port: port})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'started') {
+                    document.getElementById('start-button').disabled = true;
+                    document.getElementById('stop-button').disabled = false;
+                    intervalId = setInterval(() => {
+                        updateData();
+                        updateChart();
+                    }, 1000);
+                }
+            });
+        }
 
-            const ctx = document.getElementById('chart').getContext('2d');
+        function stopReading() {
+            fetch('/stop', {method: 'POST'})
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'stopped') {
+                    clearInterval(intervalId);
+                    document.getElementById('start-button').disabled = false;
+                    document.getElementById('stop-button').disabled = true;
+                }
+            });
+        }
+
+        function resetAll() {
+            fetch('/reset_all', {method: 'POST'})
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('All values reset successful');
+                    // Clear the chart data
+                    chart.data.datasets.forEach((dataset) => {
+                        dataset.data = [];
+                    });
+                    chart.update();
+                    // Reset all displays
+                    document.getElementById('voltage').textContent = 'Voltage: 0.00 V';
+                    document.getElementById('current').textContent = 'Current: 0.00 A';
+                    document.getElementById('power').textContent = 'Power: 0.00 W';
+                    document.getElementById('energy').textContent = 'Energy: 0.00 Wh';
+                } else {
+                    alert('Error resetting values: ' + data.message);
+                }
+            });
+        }
+
+        function createChart() {
+            const ctx = document.getElementById('dataChart').getContext('2d');
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: chartData.labels,
-                    datasets: [{
-                        label: 'Voltage (V)',
-                        data: chartData.voltages,
-                        borderColor: 'red',
-                        yAxisID: 'y-axis-1',
-                        fill: false
-                    }, {
-                        label: 'Current (A)',
-                        data: chartData.currents,
-                        borderColor: 'blue',
-                        yAxisID: 'y-axis-1',
-                        fill: false
-                    }, {
-                        label: 'Energy (Wh)',
-                        data: chartData.energies,
-                        borderColor: 'green',
-                        yAxisID: 'y-axis-2',
-                        fill: false
-                    }]
+                    datasets: [
+                        { label: 'Voltage (V)', data: [], borderColor: 'red', yAxisID: 'y' },
+                        { label: 'Current (A)', data: [], borderColor: 'blue', yAxisID: 'y' },
+                        { label: 'Energy (Wh)', data: [], borderColor: 'green', yAxisID: 'y2' }
+                    ]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
                     scales: {
                         x: {
-                            type: 'category',
+                            type: 'time',
+                            time: {
+                                unit: 'second',
+                                displayFormats: {
+                                    second: 'HH:mm:ss'
+                                }
+                            },
                             title: {
                                 display: true,
                                 text: 'Time'
                             }
                         },
-                        'y-axis-1': {
-                            type: 'linear',
-                            display: true,
+                        y: { 
+                            type: 'linear', 
                             position: 'left',
                             title: {
                                 display: true,
                                 text: 'Voltage (V) / Current (A)'
                             }
                         },
-                        'y-axis-2': {
-                            type: 'linear',
-                            display: true,
+                        y2: { 
+                            type: 'linear', 
                             position: 'right',
                             title: {
                                 display: true,
                                 text: 'Energy (Wh)'
-                            },
-                            grid: {
-                                drawOnChartArea: false
                             }
                         }
                     },
-                    animation: {
-                        duration: 0
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
                     }
                 }
             });
         }
 
-        // Initialize chart on page load
-        initializeChart();
+        function updateChart() {
+            fetch('/graph_data')
+                .then(response => response.json())
+                .then(data => {
+                    chart.data.datasets[0].data = data.map(item => ({x: moment(item.time), y: item.voltage}));
+                    chart.data.datasets[1].data = data.map(item => ({x: moment(item.time), y: item.current}));
+                    chart.data.datasets[2].data = data.map(item => ({x: moment(item.time), y: item.energy}));
+                    chart.update();
+                });
+        }
+
+        // Create the chart when the page loads
+        createChart();
     </script>
 </body>
 </html>

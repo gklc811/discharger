@@ -116,19 +116,35 @@ def stop():
         instrument = None
     return jsonify({"status": "stopped"})
 
-@app.route('/reset_energy', methods=['POST'])
-def reset_energy():
-    global instrument, port
-    if port.lower() == 'mock':
-        # For mock mode, just reset the energy to 0
+@app.route('/reset_all', methods=['POST'])
+def reset_all():
+    global data, instrument, port
+    session = Session()
+    try:
+        # Delete all measurements from the database
+        session.query(Measurement).delete()
+        session.commit()
+        
+        # Reset all values in the global data
+        data['voltage'] = 0
+        data['current'] = 0
+        data['power'] = 0
         data['energy'] = 0
-        return jsonify({"status": "success", "message": "Energy reset in mock mode"})
-    else:
-        try:
-            instrument._perform_command(0x42, '')
-            return jsonify({"status": "success", "message": "Energy reset successful"})
-        except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 400
+        
+        if port.lower() != 'mock':
+            try:
+                # Reset energy on the device (assuming 0x42 is the command for energy reset)
+                instrument._perform_command(0x42, '')
+                # You might need additional commands here to reset other values on the device
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"Error resetting device values: {str(e)}"}), 400
+        
+        return jsonify({"status": "success", "message": "All values reset successful"})
+    except Exception as e:
+        session.rollback()
+        return jsonify({"status": "error", "message": f"Error resetting values: {str(e)}"}), 500
+    finally:
+        session.close()
 
 @app.route('/data')
 def get_data():
@@ -138,45 +154,27 @@ def get_data():
 def get_graph_data():
     session = Session()
     
-    # Get the start and end times of the discharge process
-    start_time = session.query(func.min(Measurement.timestamp)).scalar()
-    end_time = session.query(func.max(Measurement.timestamp)).scalar()
-    
-    if not start_time or not end_time:
+    try:
+        # Get all measurements
+        measurements = session.query(Measurement).order_by(Measurement.timestamp).all()
+        
+        if not measurements:
+            return jsonify([])
+        
+        graph_data = [{
+            'time': m.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'voltage': round(m.voltage, 2) if m.voltage is not None else None,
+            'current': round(m.current, 2) if m.current is not None else None,
+            'power': round(m.power, 2) if m.power is not None else None,
+            'energy': round(m.energy, 2) if m.energy is not None else None
+        } for m in measurements]
+        
+        return jsonify(graph_data)
+    except Exception as e:
+        print(f"Error in get_graph_data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
         session.close()
-        return jsonify([])
-    
-    total_duration = (end_time - start_time).total_seconds()
-    
-    # Calculate the interval to get approximately 40 data points
-    interval_seconds = math.ceil(total_duration / 40)
-    
-    # Ensure the interval is at least 1 second
-    interval_seconds = max(interval_seconds, 1)
-    
-    # Query the database with the calculated interval
-    query = session.query(
-        func.datetime(Measurement.timestamp, 'unixepoch', 'localtime').label('time'),
-        func.avg(Measurement.voltage).label('voltage'),
-        func.avg(Measurement.current).label('current'),
-        func.avg(Measurement.power).label('power'),
-        func.max(Measurement.energy).label('energy')
-    ).group_by(
-        (func.strftime('%s', Measurement.timestamp) - func.strftime('%s', start_time)) / interval_seconds
-    ).order_by(Measurement.timestamp)
-    
-    results = query.all()
-    
-    graph_data = [{
-        'time': result.time.strftime('%Y-%m-%d %H:%M:%S'),
-        'voltage': round(result.voltage, 2),
-        'current': round(result.current, 2),
-        'power': round(result.power, 2),
-        'energy': round(result.energy, 2)
-    } for result in results]
-    
-    session.close()
-    return jsonify(graph_data)
 
 if __name__ == '__main__':
     # Open the web page in the default browser
