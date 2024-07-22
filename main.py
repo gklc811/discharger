@@ -3,6 +3,12 @@ import random
 import threading
 import time
 import webbrowser
+from sqlalchemy import create_engine, Column, Integer, Float, DateTime, func
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from datetime import datetime
+import math
+
 
 try:
     import minimalmodbus
@@ -11,6 +17,23 @@ except ImportError:
     print("minimalmodbus or pyserial not found. Only Mock mode will be available.")
 
 app = Flask(__name__)
+
+# SQLite and SQLAlchemy setup
+engine = create_engine('sqlite:///aac_capacity_tester.db', echo=True)
+Base = declarative_base()
+
+class Measurement(Base):
+    __tablename__ = 'measurements'
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    voltage = Column(Float)
+    current = Column(Float)
+    power = Column(Float)
+    energy = Column(Float)
+
+Base.metadata.create_all(engine)
+Session = sessionmaker(bind=engine)
 
 # Global variables to store the latest data
 data = {
@@ -25,6 +48,7 @@ instrument = None
 
 def read_data():
     global running, data, port, instrument
+    session = Session()
     while running:
         if port.lower() == 'mock':
             data['voltage'] = random.uniform(20, 200)
@@ -45,7 +69,20 @@ def read_data():
                 print(f"Error reading data: {e}")
                 running = False
                 break
+        
+        # Write data to SQLite
+        measurement = Measurement(
+            voltage=data['voltage'],
+            current=data['current'],
+            power=data['power'],
+            energy=data['energy']
+        )
+        session.add(measurement)
+        session.commit()
+        
         time.sleep(1)
+    
+    session.close()
 
 @app.route('/')
 def index():
@@ -97,8 +134,53 @@ def reset_energy():
 def get_data():
     return jsonify(data)
 
+@app.route('/graph_data')
+def get_graph_data():
+    session = Session()
+    
+    # Get the start and end times of the discharge process
+    start_time = session.query(func.min(Measurement.timestamp)).scalar()
+    end_time = session.query(func.max(Measurement.timestamp)).scalar()
+    
+    if not start_time or not end_time:
+        session.close()
+        return jsonify([])
+    
+    total_duration = (end_time - start_time).total_seconds()
+    
+    # Calculate the interval to get approximately 40 data points
+    interval_seconds = math.ceil(total_duration / 40)
+    
+    # Ensure the interval is at least 1 second
+    interval_seconds = max(interval_seconds, 1)
+    
+    # Query the database with the calculated interval
+    query = session.query(
+        func.datetime(Measurement.timestamp, 'unixepoch', 'localtime').label('time'),
+        func.avg(Measurement.voltage).label('voltage'),
+        func.avg(Measurement.current).label('current'),
+        func.avg(Measurement.power).label('power'),
+        func.max(Measurement.energy).label('energy')
+    ).group_by(
+        (func.strftime('%s', Measurement.timestamp) - func.strftime('%s', start_time)) / interval_seconds
+    ).order_by(Measurement.timestamp)
+    
+    results = query.all()
+    
+    graph_data = [{
+        'time': result.time.strftime('%Y-%m-%d %H:%M:%S'),
+        'voltage': round(result.voltage, 2),
+        'current': round(result.current, 2),
+        'power': round(result.power, 2),
+        'energy': round(result.energy, 2)
+    } for result in results]
+    
+    session.close()
+    return jsonify(graph_data)
+
 if __name__ == '__main__':
     # Open the web page in the default browser
     webbrowser.open('http://127.0.0.1:5000')
+    
     # Run the Flask app
     app.run(debug=True, use_reloader=False)

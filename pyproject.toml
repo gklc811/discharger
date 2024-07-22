@@ -10,6 +10,7 @@ python = "^3.11"
 minimalmodbus = "^2.1.1"
 pyserial = "^3.5"
 flask = "^3.0.3"
+sqlalchemy = "^2.0.31"
 
 
 [build-system]
