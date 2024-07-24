@@ -168,14 +168,14 @@ def get_graph_data():
             return jsonify([])
         
         # Calculate the multiplication factor
-        factor = max_id / 40  # We'll reserve 2 spots for first and last points
+        factor = max_id / 100  # We'll reserve 2 spots for first and last points
         
-        if total_count <= 40:
-            # If we have 40 or fewer points, return all of them
+        if total_count <= 100:
+            # If we have 100 or fewer points, return all of them
             measurements = session.query(Measurement).order_by(Measurement.incremental_id).all()
         else:
             # Generate the list of IDs to query (38 points)
-            ids_to_query = [round(i * factor) for i in range(1, 39)]
+            ids_to_query = [round(i * factor) for i in range(1, 98)]
             
             # Add first and last IDs if they're not already included
             if 1 not in ids_to_query:
