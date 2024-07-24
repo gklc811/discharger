@@ -116,9 +116,6 @@ def start():
 def stop():
     global running, instrument
     running = False
-    if instrument:
-        instrument.serial.close()
-        instrument = None
     return jsonify({"status": "stopped"})
 
 @app.route('/reset_all', methods=['POST'])
@@ -139,7 +136,10 @@ def reset_all():
         if port.lower() != 'mock':
             try:
                 # Reset energy on the device (assuming 0x42 is the command for energy reset)
-                instrument._perform_command(0x42, '')
+                instrument._perform_command(0x42, b'')
+                if instrument:
+                    instrument.serial.close()
+                    instrument = None
                 # You might need additional commands here to reset other values on the device
             except Exception as e:
                 return jsonify({"status": "error", "message": f"Error resetting device values: {str(e)}"}), 400
