@@ -56,9 +56,15 @@
             padding: 10px;
             margin: 0 5px;
         }
-        #chart-container {
-            width: 100%;
-            height: 400px;
+        .chart-row {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+        }
+        .chart-container {
+            flex: 1;
+            min-width: 300px;
+            margin: 10px;
         }
     </style>
 </head>
@@ -79,12 +85,16 @@
         <div id="energy" class="data-item">Energy: - Wh</div>
     </div>
 
-    <div id="chart-container">
-        <canvas id="dataChart"></canvas>
-    </div>
-
-    <div id="chart-container">
-        <canvas id="energy-chart-container"></canvas>
+    <div class="chart-row">
+        <div class="chart-container">
+            <canvas id="voltage-chart-container"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="amp-chart-container"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="energy-chart-container"></canvas>
+        </div>
     </div>
 
     
@@ -145,10 +155,18 @@
                 if (data.status === 'success') {
                     alert('All values reset successful');
                     // Clear the chart data
-                    chart.data.datasets.forEach((dataset) => {
+                    voltchart.data.datasets.forEach((dataset) => {
                         dataset.data = [];
                     });
-                    chart.update();
+                    voltchart.update();
+                    ampchart.data.datasets.forEach((dataset) => {
+                        dataset.data = [];
+                    });
+                    ampchart.update();
+                    energyChart.data.datasets.forEach((dataset) => {
+                        dataset.data = [];
+                    });
+                    energyChart.update();
                     // Reset all displays
                     document.getElementById('voltage').textContent = 'Voltage: 0.00 V';
                     document.getElementById('current').textContent = 'Current: 0.00 A';
@@ -161,12 +179,52 @@
         }
 
         function createChart() {
-            const ctx = document.getElementById('dataChart').getContext('2d');
-            chart = new Chart(ctx, {
+            const voltctx = document.getElementById('voltage-chart-container').getContext('2d');
+            voltchart = new Chart(voltctx, {
                 type: 'line',
                 data: {
                     datasets: [
                         { label: 'Voltage (V)', data: [], borderColor: 'red', yAxisID: 'y' },
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'second',
+                                displayFormats: {
+                                    second: 'HH:mm:ss'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: { 
+                            type: 'linear', 
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Voltage (V)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+
+            const ampctx = document.getElementById('amp-chart-container').getContext('2d');
+            ampchart = new Chart(ampctx, {
+                type: 'line',
+                data: {
+                    datasets: [
                         { label: 'Current (A)', data: [], borderColor: 'blue', yAxisID: 'y' },
                     ]
                 },
@@ -191,7 +249,7 @@
                             position: 'left',
                             title: {
                                 display: true,
-                                text: 'Voltage (V) / Current (A)'
+                                text: 'Current (A)'
                             }
                         }
                     },
@@ -226,10 +284,11 @@
             fetch('/graph_data')
                 .then(response => response.json())
                 .then(data => {
-                    chart.data.datasets[0].data = data.map(item => ({x: new Date(item.time), y: item.voltage}));
-                    chart.data.datasets[1].data = data.map(item => ({x: new Date(item.time), y: item.current}));
-                    chart.update();
+                    voltchart.data.datasets[0].data = data.map(item => ({x: new Date(item.time), y: item.voltage}));
+                    ampchart.data.datasets[0].data = data.map(item => ({x: new Date(item.time), y: item.current}));
                     energyChart.data.datasets[0].data = data.map(item => ({x: new Date(item.time), y: item.energy}));
+                    voltchart.update();
+                    ampchart.update();
                     energyChart.update();
                 });
         }
