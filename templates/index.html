@@ -83,6 +83,12 @@
         <canvas id="dataChart"></canvas>
     </div>
 
+    <div id="chart-container">
+        <canvas id="energy-chart-container"></canvas>
+    </div>
+
+    
+
     <script>
         let chart;
         let intervalId;
@@ -162,7 +168,6 @@
                     datasets: [
                         { label: 'Voltage (V)', data: [], borderColor: 'red', yAxisID: 'y' },
                         { label: 'Current (A)', data: [], borderColor: 'blue', yAxisID: 'y' },
-                        { label: 'Energy (Wh)', data: [], borderColor: 'green', yAxisID: 'y2' }
                     ]
                 },
                 options: {
@@ -188,14 +193,6 @@
                                 display: true,
                                 text: 'Voltage (V) / Current (A)'
                             }
-                        },
-                        y2: { 
-                            type: 'linear', 
-                            position: 'right',
-                            title: {
-                                display: true,
-                                text: 'Energy (Wh)'
-                            }
                         }
                     },
                     plugins: {
@@ -205,7 +202,25 @@
                     }
                 }
             });
+
+            const energyCtx = document.getElementById('energy-chart-container').getContext('2d');
+            energyChart = new Chart(energyCtx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        { label: 'Energy', data: [], borderColor: 'purple', fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { type: 'time', time: { unit: 'second' } },
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
         }
+        
 
         function updateChart() {
             fetch('/graph_data')
@@ -213,8 +228,9 @@
                 .then(data => {
                     chart.data.datasets[0].data = data.map(item => ({x: new Date(item.time), y: item.voltage}));
                     chart.data.datasets[1].data = data.map(item => ({x: new Date(item.time), y: item.current}));
-                    chart.data.datasets[2].data = data.map(item => ({x: new Date(item.time), y: item.energy}));
                     chart.update();
+                    energyChart.data.datasets[0].data = data.map(item => ({x: new Date(item.time), y: item.energy}));
+                    energyChart.update();
                 });
         }
 
