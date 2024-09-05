@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_file
 import random
 import threading
 import time
@@ -7,7 +7,8 @@ from sqlalchemy import create_engine, Column, Integer, Float, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
-import math
+import pandas as pd
+import os
 
 
 try:
@@ -123,6 +124,12 @@ def reset_all():
     global data, instrument, port
     session = Session()
     try:
+        # Convert database to Excel before deleting, excluding 'id' and 'incremental_id'
+        df = pd.read_sql_table('measurements', engine)
+        df = df.drop(columns=['id', 'incremental_id'])
+        excel_file = 'aac_capacity_tester_data.xlsx'
+        df.to_excel(excel_file, index=False)
+        
         # Delete all measurements from the database
         session.query(Measurement).delete()
         session.commit()
@@ -144,12 +151,21 @@ def reset_all():
             except Exception as e:
                 return jsonify({"status": "error", "message": f"Error resetting device values: {str(e)}"}), 400
         
-        return jsonify({"status": "success", "message": "All values reset successful"})
+        return jsonify({"status": "success", "message": "All values reset successful", "excel_file": excel_file})
     except Exception as e:
         session.rollback()
         return jsonify({"status": "error", "message": f"Error resetting values: {str(e)}"}), 500
     finally:
         session.close()
+
+@app.route('/download_excel')
+def download_excel():
+    excel_file = 'aac_capacity_tester_data.xlsx'
+    if os.path.exists(excel_file):
+        return send_file(excel_file, as_attachment=True)
+    else:
+        return jsonify({"status": "error", "message": "Excel file not found"}), 404
+    
 
 @app.route('/data')
 def get_data():

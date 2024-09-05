@@ -172,9 +172,18 @@
                     document.getElementById('current').textContent = 'Current: 0.00 A';
                     document.getElementById('power').textContent = 'Power: 0.00 W';
                     document.getElementById('energy').textContent = 'Energy: 0.00 Wh';
+
+                    // Trigger download of the Excel file
+                    if (data.excel_file) {
+                        window.location.href = '/download_excel';
+                    }
                 } else {
                     alert('Error resetting values: ' + data.message);
                 }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while resetting values.');
             });
         }
 
